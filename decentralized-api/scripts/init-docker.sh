@@ -70,9 +70,11 @@ fi
 mkdir -p /root/.dapi
 initial_config_file="/root/api-config.yaml"
 yaml_file="/root/.dapi/api-config.yaml"
-if [ -f "$initial_config_file" ]; then
+if [ ! -f "$yaml_file" ]; then
   echo "Copying initial config file to $yaml_file"
   cp "$initial_config_file" "$yaml_file"
+else
+  echo "Config file $yaml_file already exists"
 fi
 
 
