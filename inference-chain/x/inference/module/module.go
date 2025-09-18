@@ -163,7 +163,7 @@ func (am AppModule) ExportGenesis(ctx sdk.Context, cdc codec.JSONCodec) json.Raw
 // ConsensusVersion is a sequence number for state-breaking change of the module.
 // It should be incremented on each consensus-breaking change introduced by the module.
 // To avoid wrong/empty versions, the initial version should be set to 1.
-func (AppModule) ConsensusVersion() uint64 { return 4 }
+func (AppModule) ConsensusVersion() uint64 { return 5 }
 
 // BeginBlock contains the logic that is automatically triggered at the beginning of each block.
 // The begin block implementation is optional.
@@ -242,7 +242,15 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 
 	partialUpgrades := am.keeper.GetAllPartialUpgrade(ctx)
 	for _, pu := range partialUpgrades {
-		if pu.Height < uint64(blockHeight) {
+		if pu.Height == uint64(blockHeight) {
+			if pu.NodeVersion != "" {
+				am.LogInfo("PartialUpgradeActive - updating current MLNode version", types.Upgrades,
+					"partialUpgradeHeight", pu.Height, "blockHeight", blockHeight, "nodeVersion", pu.NodeVersion)
+				am.keeper.SetMLNodeVersion(ctx, types.MLNodeVersion{
+					CurrentVersion: pu.NodeVersion,
+				})
+			}
+		} else if pu.Height < uint64(blockHeight) {
 			am.LogInfo("PartialUpgradeExpired", types.Upgrades, "partialUpgradeHeight", pu.Height, "blockHeight", blockHeight)
 			am.keeper.RemovePartialUpgrade(ctx, pu.Height)
 		}
