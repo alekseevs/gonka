@@ -184,6 +184,11 @@ func (o *NodePoCOrchestratorImpl) ValidateReceivedBatches(startOfValStageHeight 
 
 					joinedBatch.Nonces = append(joinedBatch.Nonces, nonce)
 					joinedBatch.Dist = append(joinedBatch.Dist, b.Dist[i])
+				} else {
+					logging.Info("ValidateReceivedBatches. Duplicate nonce found", types.PoC,
+						"participant", participantBatches.Participant,
+						"batchId", b.BatchId,
+						"nonce", nonce)
 				}
 			}
 		}
