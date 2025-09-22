@@ -547,6 +547,7 @@ func (s *InferenceValidator) validate(inference types.Inference, inferenceNode *
 	// From here on, errors are on the part of the validator, not the inference that was passed in
 	requestMap["enforced_tokens"] = enforcedTokens
 	requestMap["stream"] = false
+	requestMap["skip_special_tokens"] = false
 	delete(requestMap, "stream_options")
 
 	requestBody, err := json.Marshal(requestMap)
@@ -684,6 +685,7 @@ func compareLogits(
 	baseComparisonResult BaseValidationResult,
 ) ValidationResult {
 	if len(originalLogits) != len(validationLogits) {
+		logging.Error("Different length of logits", types.Validation, "originalLogits", originalLogits, "validationLogits", validationLogits, "lengthOriginal", len(originalLogits), "lengthValidation", len(validationLogits))
 		return &DifferentLengthValidationResult{baseComparisonResult}
 	}
 
@@ -691,6 +693,8 @@ func compareLogits(
 		o := originalLogits[i]
 		v := validationLogits[i]
 		if o.Token != v.Token {
+			logging.Error("Different tokens in logits", types.Validation, "originalLogits", originalLogits, "validationLogits", validationLogits)
+
 			return &DifferentTokensValidationResult{baseComparisonResult}
 		}
 	}
