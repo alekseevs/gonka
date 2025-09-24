@@ -31,10 +31,30 @@ func TestMsgServer_ClaimRewards(t *testing.T) {
 	require.NoError(t, err)
 	signatureHex := hex.EncodeToString(signature)
 
+	// Setup previous epoch (the one we want to claim rewards for)
 	epochIndex := uint64(100)
 	epoch := types.Epoch{Index: epochIndex, PocStartBlockHeight: 1000}
 	k.SetEpoch(ctx, &epoch)
-	k.SetEffectiveEpochIndex(ctx, epoch.Index)
+
+	// Setup current epoch (so we can claim for previous epoch)
+	currentEpochIndex := uint64(101)
+	currentEpoch := types.Epoch{Index: currentEpochIndex, PocStartBlockHeight: 2000}
+	k.SetEpoch(ctx, &currentEpoch)
+	k.SetEffectiveEpochIndex(ctx, currentEpoch.Index)
+
+	// Setup current epoch group data (required for validation)
+	currentEpochData := types.EpochGroupData{
+		EpochIndex:          currentEpoch.Index,
+		EpochGroupId:        101,
+		PocStartBlockHeight: currentEpochIndex,
+		ValidationWeights: []*types.ValidationWeight{
+			{
+				MemberAddress: testutil.Creator,
+				Weight:        10,
+			},
+		},
+	}
+	k.SetEpochGroupData(sdk.UnwrapSDKContext(ctx), currentEpochData)
 
 	// Create a settle amount for the participant with the signature
 	settleAmount := types.SettleAmount{
@@ -166,7 +186,27 @@ func TestMsgServer_ClaimRewards(t *testing.T) {
 }
 
 func TestMsgServer_ClaimRewards_NoRewards(t *testing.T) {
-	_, ms, ctx := setupMsgServer(t)
+	k, ms, ctx := setupMsgServer(t)
+
+	// Setup current epoch (so we can claim for previous epoch)
+	currentEpochIndex := uint64(101)
+	currentEpoch := types.Epoch{Index: currentEpochIndex, PocStartBlockHeight: 2000}
+	k.SetEpoch(ctx, &currentEpoch)
+	k.SetEffectiveEpochIndex(ctx, currentEpoch.Index)
+
+	// Setup current epoch group data (required for validation)
+	currentEpochData := types.EpochGroupData{
+		EpochIndex:          currentEpoch.Index,
+		EpochGroupId:        101,
+		PocStartBlockHeight: currentEpochIndex,
+		ValidationWeights: []*types.ValidationWeight{
+			{
+				MemberAddress: testutil.Creator,
+				Weight:        10,
+			},
+		},
+	}
+	k.SetEpochGroupData(sdk.UnwrapSDKContext(ctx), currentEpochData)
 
 	// Call ClaimRewards without setting up any rewards
 	resp, err := ms.ClaimRewards(ctx, &types.MsgClaimRewards{
@@ -184,6 +224,26 @@ func TestMsgServer_ClaimRewards_NoRewards(t *testing.T) {
 
 func TestMsgServer_ClaimRewards_WrongHeight(t *testing.T) {
 	k, ms, ctx := setupMsgServer(t)
+
+	// Setup current epoch (so we can claim for previous epoch)
+	currentEpochIndex := uint64(101)
+	currentEpoch := types.Epoch{Index: currentEpochIndex, PocStartBlockHeight: 2000}
+	k.SetEpoch(ctx, &currentEpoch)
+	k.SetEffectiveEpochIndex(ctx, currentEpoch.Index)
+
+	// Setup current epoch group data (required for validation)
+	currentEpochData := types.EpochGroupData{
+		EpochIndex:          currentEpoch.Index,
+		EpochGroupId:        101,
+		PocStartBlockHeight: currentEpochIndex,
+		ValidationWeights: []*types.ValidationWeight{
+			{
+				MemberAddress: testutil.Creator,
+				Weight:        10,
+			},
+		},
+	}
+	k.SetEpochGroupData(sdk.UnwrapSDKContext(ctx), currentEpochData)
 
 	// Setup a settle amount for the participant but with a different height
 	settleAmount := types.SettleAmount{
@@ -211,6 +271,26 @@ func TestMsgServer_ClaimRewards_WrongHeight(t *testing.T) {
 
 func TestMsgServer_ClaimRewards_ZeroRewards(t *testing.T) {
 	k, ms, ctx := setupMsgServer(t)
+
+	// Setup current epoch (so we can claim for previous epoch)
+	currentEpochIndex := uint64(101)
+	currentEpoch := types.Epoch{Index: currentEpochIndex, PocStartBlockHeight: 2000}
+	k.SetEpoch(ctx, &currentEpoch)
+	k.SetEffectiveEpochIndex(ctx, currentEpoch.Index)
+
+	// Setup current epoch group data (required for validation)
+	currentEpochData := types.EpochGroupData{
+		EpochIndex:          currentEpoch.Index,
+		EpochGroupId:        101,
+		PocStartBlockHeight: currentEpochIndex,
+		ValidationWeights: []*types.ValidationWeight{
+			{
+				MemberAddress: testutil.Creator,
+				Weight:        10,
+			},
+		},
+	}
+	k.SetEpochGroupData(sdk.UnwrapSDKContext(ctx), currentEpochData)
 
 	// Setup a settle amount for the participant but with zero amounts
 	settleAmount := types.SettleAmount{
@@ -257,10 +337,30 @@ func TestMsgServer_ClaimRewards_ValidationLogic(t *testing.T) {
 	require.NoError(t, err)
 	signatureHex := hex.EncodeToString(signature)
 
+	// Setup previous epoch (the one we want to claim rewards for)
 	epochIndex := uint64(100)
 	epoch := types.Epoch{Index: epochIndex, PocStartBlockHeight: 1000}
 	k.SetEpoch(sdkCtx, &epoch)
-	k.SetEffectiveEpochIndex(sdkCtx, epoch.Index)
+
+	// Setup current epoch (so we can claim for previous epoch)
+	currentEpochIndex := uint64(101)
+	currentEpoch := types.Epoch{Index: currentEpochIndex, PocStartBlockHeight: 2000}
+	k.SetEpoch(sdkCtx, &currentEpoch)
+	k.SetEffectiveEpochIndex(sdkCtx, currentEpoch.Index)
+
+	// Setup current epoch group data (required for validation)
+	currentEpochData := types.EpochGroupData{
+		EpochIndex:          currentEpoch.Index,
+		EpochGroupId:        101,
+		PocStartBlockHeight: currentEpochIndex,
+		ValidationWeights: []*types.ValidationWeight{
+			{
+				MemberAddress: testutil.Creator,
+				Weight:        50,
+			},
+		},
+	}
+	k.SetEpochGroupData(sdkCtx, currentEpochData)
 
 	settleAmount := types.SettleAmount{
 		Participant:   testutil.Creator,
@@ -452,10 +552,30 @@ func TestMsgServer_ClaimRewards_PartialValidation(t *testing.T) {
 	require.NoError(t, err)
 	signatureHex := hex.EncodeToString(signature)
 
+	// Setup previous epoch (the one we want to claim rewards for)
 	epochIndex := uint64(100)
 	epoch := types.Epoch{Index: epochIndex, PocStartBlockHeight: 1000}
 	k.SetEpoch(sdkCtx, &epoch)
-	k.SetEffectiveEpochIndex(sdkCtx, epoch.Index)
+
+	// Setup current epoch (so we can claim for previous epoch)
+	currentEpochIndex := uint64(101)
+	currentEpoch := types.Epoch{Index: currentEpochIndex, PocStartBlockHeight: 2000}
+	k.SetEpoch(sdkCtx, &currentEpoch)
+	k.SetEffectiveEpochIndex(sdkCtx, currentEpoch.Index)
+
+	// Setup current epoch group data (required for validation)
+	currentEpochData := types.EpochGroupData{
+		EpochIndex:          currentEpoch.Index,
+		EpochGroupId:        101,
+		PocStartBlockHeight: currentEpochIndex,
+		ValidationWeights: []*types.ValidationWeight{
+			{
+				MemberAddress: testutil.Creator,
+				Weight:        50,
+			},
+		},
+	}
+	k.SetEpochGroupData(sdkCtx, currentEpochData)
 
 	settleAmount := types.SettleAmount{
 		Participant:   testutil.Creator,
@@ -638,7 +758,26 @@ func TestMsgServer_ClaimRewards_PartialValidation(t *testing.T) {
 	epochIndex2 := uint64(101)
 	epoch2 := types.Epoch{Index: epochIndex2, PocStartBlockHeight: 1100}
 	k.SetEpoch(sdkCtx, &epoch2)
-	k.SetEffectiveEpochIndex(sdkCtx, epoch2.Index)
+
+	// Setup current epoch (so we can claim for epoch 101)
+	currentEpochIndex2 := uint64(102)
+	currentEpoch2 := types.Epoch{Index: currentEpochIndex2, PocStartBlockHeight: 2100}
+	k.SetEpoch(sdkCtx, &currentEpoch2)
+	k.SetEffectiveEpochIndex(sdkCtx, currentEpoch2.Index)
+
+	// Setup current epoch group data (required for validation)
+	currentEpochData2 := types.EpochGroupData{
+		EpochIndex:          currentEpoch2.Index,
+		EpochGroupId:        102,
+		PocStartBlockHeight: currentEpochIndex2,
+		ValidationWeights: []*types.ValidationWeight{
+			{
+				MemberAddress: testutil.Creator,
+				Weight:        50,
+			},
+		},
+	}
+	k.SetEpochGroupData(sdkCtx, currentEpochData2)
 
 	// Setup epoch group data for second epoch
 	epochData2 := types.EpochGroupData{
@@ -761,7 +900,26 @@ func pocAvailabilityTest(t *testing.T, validatorIsAvailableDuringPoC bool) {
 	inferenceValidationCutoff := int64(20)
 	epoch := types.Epoch{Index: 1, PocStartBlockHeight: 1000}
 	k.SetEpoch(sdkCtx, &epoch)
-	k.SetEffectiveEpochIndex(sdkCtx, epoch.Index)
+
+	// Setup current epoch (so we can claim for previous epoch)
+	currentEpochIndex := uint64(2)
+	currentEpoch := types.Epoch{Index: currentEpochIndex, PocStartBlockHeight: 2000}
+	k.SetEpoch(sdkCtx, &currentEpoch)
+	k.SetEffectiveEpochIndex(sdkCtx, currentEpoch.Index)
+
+	// Setup current epoch group data (required for validation)
+	currentEpochData := types.EpochGroupData{
+		EpochIndex:          currentEpoch.Index,
+		EpochGroupId:        2,
+		PocStartBlockHeight: currentEpochIndex,
+		ValidationWeights: []*types.ValidationWeight{
+			{
+				MemberAddress: testutil.Creator,
+				Weight:        50,
+			},
+		},
+	}
+	k.SetEpochGroupData(sdkCtx, currentEpochData)
 	params := types.DefaultParams()
 	params.EpochParams.EpochLength = epochLength
 	params.EpochParams.InferenceValidationCutoff = inferenceValidationCutoff
