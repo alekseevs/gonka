@@ -49,4 +49,7 @@ var (
 	ErrInvalidValidationThreshold              = sdkerrors.Register(ModuleName, 1138, "validation threshold must be in [0, 100] range")
 	ErrNegativeRewardAmount                    = sdkerrors.Register(ModuleName, 1139, "negative reward amount")
 	ErrDuplicateValidation                     = sdkerrors.Register(ModuleName, 1140, "participant has already validated this inference")
+	ErrPocNodeIdEmpty                          = sdkerrors.Register(ModuleName, 1141, "node id is empty")
+	ErrInferenceFinishProcessed                = sdkerrors.Register(ModuleName, 1142, "inference has already finished processed")
+	ErrInferenceStartProcessed                 = sdkerrors.Register(ModuleName, 1143, "inference has already started processed")
 )

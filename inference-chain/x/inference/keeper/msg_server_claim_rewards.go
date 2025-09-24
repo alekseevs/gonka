@@ -20,8 +20,10 @@ func (k msgServer) ClaimRewards(goCtx context.Context, msg *types.MsgClaimReward
 
 	settleAmount, response := k.validateRequest(ctx, msg)
 	if response != nil {
+		k.LogInfo("Validate request failed", types.Claims, "error", response.Result, "account", msg.Creator)
 		return response, nil
 	}
+	k.LogInfo("Validate request succeeded", types.Claims, "account", msg.Creator, "settleAmount", settleAmount)
 
 	response, err := k.validateClaim(ctx, msg, settleAmount)
 	if err != nil {
@@ -155,38 +157,45 @@ func (k msgServer) validateClaim(ctx sdk.Context, msg *types.MsgClaimRewards, se
 	}
 
 	// Check for missed validations
-	if validationMissed, err := k.hasMissedValidations(ctx, msg); err != nil {
+	if validationMissedSignificance, err := k.hasSignificantMissedValidations(ctx, msg); err != nil {
 		k.LogError("Failed to check for missed validations", types.Claims, "error", err)
 		return &types.MsgClaimRewardsResponse{
 			Amount: 0,
 			Result: "Failed to check for missed validations",
 		}, err
-	} else if validationMissed {
-		k.LogError("Inference not validated", types.Claims, "account", msg.Creator)
+	} else if validationMissedSignificance {
+		k.LogError("Inference validation missed significantly", types.Claims, "account", msg.Creator)
 		// TODO: Report that validator has missed validations
 		return &types.MsgClaimRewardsResponse{
 			Amount: 0,
-			Result: "Inference not validated",
+			Result: "Inference validation missed significantly",
 		}, types.ErrValidationsMissed
 	}
 
 	return nil, nil
 }
 
-func (k msgServer) hasMissedValidations(ctx sdk.Context, msg *types.MsgClaimRewards) (bool, error) {
+func (k msgServer) hasSignificantMissedValidations(ctx sdk.Context, msg *types.MsgClaimRewards) (bool, error) {
 	mustBeValidated, err := k.getMustBeValidatedInferences(ctx, msg)
 	if err != nil {
 		return false, err
 	}
 	wasValidated := k.getValidatedInferences(ctx, msg)
 
+	total := len(mustBeValidated)
+	missed := 0
 	for _, inferenceId := range mustBeValidated {
 		if !wasValidated[inferenceId] {
-			return true, nil
+			missed++
 		}
 	}
+	passed, err := calculations.MissedStatTest(missed, total)
+	k.LogInfo("Missed validations", types.Claims, "missed", missed, "totalToBeValidated", total, "passed", passed)
 
-	return false, nil
+	if err != nil {
+		return false, err
+	}
+	return !passed, nil
 }
 
 func (ms msgServer) validateSeedSignatureForPubkey(msg *types.MsgClaimRewards, settleAmount *types.SettleAmount, pubKey cryptotypes.PubKey) error {

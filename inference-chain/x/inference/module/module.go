@@ -403,6 +403,9 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		return
 	}
 
+	modelAssigner := NewModelAssigner(am.keeper, am.keeper)
+	modelAssigner.setModelsForParticipants(ctx, activeParticipants, *upcomingEpoch)
+
 	// Adjust weights based on collateral after the grace period. This modifies the weights in-place.
 	if err := am.keeper.AdjustWeightsByCollateral(ctx, activeParticipants); err != nil {
 		am.LogError("onSetNewValidatorsStage: failed to adjust weights by collateral", types.Tokenomics, "error", err)
@@ -412,9 +415,6 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 
 	// Apply universal power capping to epoch powers
 	activeParticipants = am.applyEpochPowerCapping(ctx, activeParticipants)
-
-	modelAssigner := NewModelAssigner(am.keeper, am.keeper)
-	modelAssigner.setModelsForParticipants(ctx, activeParticipants, *upcomingEpoch)
 
 	err = am.RegisterTopMiners(ctx, activeParticipants, blockTime)
 	if err != nil {
@@ -609,6 +609,28 @@ func (am AppModule) moveUpcomingToEffectiveGroup(ctx context.Context, blockHeigh
 
 	am.keeper.SetEpochGroupData(ctx, newGroupData)
 	am.keeper.SetEpochGroupData(ctx, previousGroupData)
+
+	// Set all current ActiveParticipants as ParticipantStatus_ACTIVE
+	activeParticipants, found := am.keeper.GetActiveParticipants(ctx, newEpochIndex)
+	if !found {
+		am.LogError("Unable to get active participants", types.EpochGroup, "epochIndex", newEpochIndex)
+		return
+	}
+	ids := make([]string, len(activeParticipants.Participants))
+	for i, participant := range activeParticipants.Participants {
+		ids[i] = participant.Index
+	}
+	participants, ok := am.keeper.GetParticipants(ctx, ids)
+	if !ok {
+		am.LogError("Unable to get participants", types.EpochGroup, "ids", ids)
+		return
+	}
+
+	am.LogInfo("Setting participants to active", types.EpochGroup, "len(participants)", len(participants))
+	for _, participant := range participants {
+		participant.Status = types.ParticipantStatus_ACTIVE
+		am.keeper.SetParticipant(ctx, participant)
+	}
 }
 
 // applyEpochPowerCapping applies universal power capping to activeParticipants after ComputeNewWeights

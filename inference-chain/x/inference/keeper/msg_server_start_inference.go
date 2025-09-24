@@ -37,6 +37,11 @@ func (k msgServer) StartInference(goCtx context.Context, msg *types.MsgStartInfe
 
 	existingInference, found := k.GetInference(ctx, msg.InferenceId)
 
+	if found && existingInference.StartProcessed() {
+		k.LogError("StartInference: inference already started", types.Inferences, "inferenceId", msg.InferenceId)
+		return nil, sdkerrors.Wrap(types.ErrInferenceStartProcessed, "inference has already start processed")
+	}
+
 	// Record the current price only if this is the first message (FinishInference not processed yet)
 	// This ensures consistent pricing regardless of message arrival order
 	if !existingInference.FinishedProcessed() {
@@ -133,8 +138,6 @@ func (k msgServer) processInferencePayments(
 		}
 		executor.CoinBalance += payments.ExecutorPayment
 		executor.CurrentEpochStats.EarnedCoins += uint64(payments.ExecutorPayment)
-		executor.CurrentEpochStats.InferenceCount++
-		executor.LastInferenceTime = inference.EndBlockTimestamp
 		k.SafeLogSubAccountTransaction(ctx, executor.Address, types.ModuleName, types.OwedSubAccount, executor.CoinBalance, "inference_started:"+inference.InferenceId)
 		k.SetParticipant(ctx, executor)
 	}

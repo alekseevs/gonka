@@ -685,7 +685,10 @@ func compareLogits(
 	baseComparisonResult BaseValidationResult,
 ) ValidationResult {
 	if len(originalLogits) != len(validationLogits) {
-		logging.Error("Different length of logits", types.Validation, "originalLogits", originalLogits, "validationLogits", validationLogits, "lengthOriginal", len(originalLogits), "lengthValidation", len(validationLogits))
+		logging.Warn("Different length of logits", types.Validation, "originalLogits", originalLogits, "validationLogits", validationLogits, "lengthOriginal", len(originalLogits), "lengthValidation", len(validationLogits))
+	}
+	if len(validationLogits) < len(originalLogits) {
+		logging.Warn("Validation logits are shorter than original logits", types.Validation, "originalLogits", originalLogits, "validationLogits", validationLogits, "lengthOriginal", len(originalLogits), "lengthValidation", len(validationLogits))
 		return &DifferentLengthValidationResult{baseComparisonResult}
 	}
 

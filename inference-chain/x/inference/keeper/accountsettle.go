@@ -4,8 +4,11 @@ import (
 	"context"
 	"math"
 
+	"cosmossdk.io/log"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/productscience/inference/x/inference/calculations"
 	"github.com/productscience/inference/x/inference/types"
+
 	"github.com/shopspring/decimal"
 )
 
@@ -87,6 +90,35 @@ func (k *Keeper) GetSettleParameters(ctx context.Context) *SettleParameters {
 	}
 }
 
+func CheckAndPunishForDowntimeForParticipants(participants []types.Participant, rewards map[string]uint64, logger log.Logger) {
+	for _, participant := range participants {
+		rewards[participant.Address] = CheckAndPunishForDowntimeForParticipant(participant, rewards[participant.Address], logger)
+	}
+}
+
+func CheckAndPunishForDowntimeForParticipant(participant types.Participant, reward uint64, logger log.Logger) uint64 {
+	totalRequests := participant.CurrentEpochStats.InferenceCount + participant.CurrentEpochStats.MissedRequests
+	missedRequests := participant.CurrentEpochStats.MissedRequests
+	logger.Info("Checking downtime for participant", "participant", participant.Address, "totalRequests", totalRequests, "missedRequests", missedRequests, "reward", reward)
+	finalReward := CheckAndPunishForDowntime(totalRequests, missedRequests, reward)
+	logger.Info("Final reward after downtime check", "participant", participant.Address, "finalReward", finalReward)
+	return finalReward
+}
+
+func CheckAndPunishForDowntime(total, missed, reward uint64) uint64 {
+	if total == 0 {
+		return reward
+	}
+	passed, err := calculations.MissedStatTest(int(missed), int(total))
+	if err != nil {
+		return reward
+	}
+	if !passed {
+		return 0
+	}
+	return reward
+}
+
 func (k *Keeper) SettleAccounts(ctx context.Context, currentEpochIndex uint64, previousEpochIndex uint64) error {
 	if currentEpochIndex == 0 {
 		k.LogInfo("SettleAccounts Skipped For Epoch 0", types.Settle, "currentEpochIndex", currentEpochIndex, "skipping")
@@ -124,7 +156,7 @@ func (k *Keeper) SettleAccounts(ctx context.Context, currentEpochIndex uint64, p
 		k.LogInfo("Using Bitcoin-style reward system", types.Settle)
 		var bitcoinResult BitcoinResult
 		var err error
-		amounts, bitcoinResult, err = GetBitcoinSettleAmounts(allParticipants, &data, params.BitcoinRewardParams, settleParameters)
+		amounts, bitcoinResult, err = GetBitcoinSettleAmounts(allParticipants, &data, params.BitcoinRewardParams, settleParameters, k.Logger())
 		if err != nil {
 			k.LogError("Error getting Bitcoin settle amounts", types.Settle, "error", err)
 		}
@@ -132,13 +164,14 @@ func (k *Keeper) SettleAccounts(ctx context.Context, currentEpochIndex uint64, p
 			k.LogError("Bitcoin reward amount is negative", types.Settle, "amount", bitcoinResult.Amount)
 			return types.ErrNegativeRewardAmount
 		}
+		k.LogInfo("Bitcoin reward amount", types.Settle, "amount", bitcoinResult.Amount)
 		rewardAmount = bitcoinResult.Amount
 	} else {
 		// Use current WorkCoins-based variable reward system with its own parameters
 		k.LogInfo("Using current WorkCoins-based reward system", types.Settle)
 		var subsidyResult SubsidyResult
 		var err error
-		amounts, subsidyResult, err = GetSettleAmounts(allParticipants, settleParameters)
+		amounts, subsidyResult, err = GetSettleAmounts(allParticipants, settleParameters, k.Logger())
 		if err != nil {
 			k.LogError("Error getting settle amounts", types.Settle, "error", err)
 		}
@@ -230,8 +263,8 @@ func (k *Keeper) SettleAccounts(ctx context.Context, currentEpochIndex uint64, p
 	return nil
 }
 
-func GetSettleAmounts(participants []types.Participant, tokenParams *SettleParameters) ([]*SettleResult, SubsidyResult, error) {
-	totalWork, _ := getWorkTotals(participants)
+func GetSettleAmounts(participants []types.Participant, tokenParams *SettleParameters, logger log.Logger) ([]*SettleResult, SubsidyResult, error) {
+	totalWork, _ := getWorkTotals(participants, logger)
 	subsidyResult := tokenParams.GetTotalSubsidy(totalWork)
 	rewardDistribution := DistributedCoinInfo{
 		totalWork:       totalWork,
@@ -241,7 +274,7 @@ func GetSettleAmounts(participants []types.Participant, tokenParams *SettleParam
 	distributions := make([]DistributedCoinInfo, 0)
 	distributions = append(distributions, rewardDistribution)
 	for _, p := range participants {
-		settle, err := getSettleAmount(&p, distributions)
+		settle, err := getSettleAmount(p, distributions, logger)
 		// We have to create amount record for each participant in the same order as participants
 		amounts = append(amounts, &SettleResult{
 			Settle: settle,
@@ -254,13 +287,14 @@ func GetSettleAmounts(participants []types.Participant, tokenParams *SettleParam
 	return amounts, subsidyResult, nil
 }
 
-func getWorkTotals(participants []types.Participant) (int64, int64) {
+func getWorkTotals(participants []types.Participant, logger log.Logger) (int64, int64) {
 	totalWork := int64(0)
 	invalidatedBalance := int64(0)
 	for _, p := range participants {
 		// Do not count invalid participants work as "work", since it should not be part of the distributions
 		if p.CoinBalance > 0 && p.Status != types.ParticipantStatus_INVALID {
-			totalWork += p.CoinBalance
+			newCoinBalance := CheckAndPunishForDowntimeForParticipant(p, uint64(p.CoinBalance), logger)
+			totalWork += int64(newCoinBalance)
 		}
 		if p.CoinBalance > 0 && p.Status == types.ParticipantStatus_INVALID {
 			invalidatedBalance += p.CoinBalance
@@ -269,7 +303,7 @@ func getWorkTotals(participants []types.Participant) (int64, int64) {
 	return totalWork, invalidatedBalance
 }
 
-func getSettleAmount(participant *types.Participant, rewardInfo []DistributedCoinInfo) (*types.SettleAmount, error) {
+func getSettleAmount(participant types.Participant, rewardInfo []DistributedCoinInfo, logger log.Logger) (*types.SettleAmount, error) {
 	settle := &types.SettleAmount{
 		Participant: participant.Address,
 	}
@@ -279,7 +313,7 @@ func getSettleAmount(participant *types.Participant, rewardInfo []DistributedCoi
 	if participant.Status == types.ParticipantStatus_INVALID {
 		return settle, nil
 	}
-	workCoins := participant.CoinBalance
+	workCoins := int64(CheckAndPunishForDowntimeForParticipant(participant, uint64(participant.CoinBalance), logger))
 	rewardCoins := int64(0)
 	for _, distribution := range rewardInfo {
 		if participant.Status == types.ParticipantStatus_INVALID {

@@ -212,6 +212,7 @@ class ResponseService {
               "public_key": "$publicKey",
               "block_hash": "$blockHash",
               "block_height": $blockHeight,
+              "node_id": $nodeNumber,
               "nonces": $nonces,
               "dist": $dist,
               "received_dist": $dist
