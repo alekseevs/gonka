@@ -118,6 +118,22 @@ func (ms msgServer) finishSettle(ctx sdk.Context, settleAmount *types.SettleAmou
 }
 
 func (k msgServer) validateRequest(ctx sdk.Context, msg *types.MsgClaimRewards) (*types.SettleAmount, *types.MsgClaimRewardsResponse) {
+	currentEpoch, err := k.GetCurrentEpochGroup(ctx)
+	if err != nil {
+		k.LogError("GetCurrentEpoch failed", types.Claims, "error", err)
+		return nil, &types.MsgClaimRewardsResponse{
+			Amount: 0,
+			Result: "Can't validate claim, current epoch group not found",
+		}
+	}
+
+	if (currentEpoch.GroupData.EpochIndex - 1) != msg.EpochIndex {
+		k.LogError("Current epoch group does not match previous epoch", types.Claims, "epoch", msg.EpochIndex, "currentEpoch", currentEpoch.GroupData.EpochIndex)
+		return nil, &types.MsgClaimRewardsResponse{
+			Amount: 0,
+			Result: "Can't validate claim, current epoch group does not match previous epoch",
+		}
+	}
 	settleAmount, found := k.GetSettleAmount(ctx, msg.Creator)
 	if !found {
 		k.LogDebug("SettleAmount not found for address", types.Claims, "address", msg.Creator)
