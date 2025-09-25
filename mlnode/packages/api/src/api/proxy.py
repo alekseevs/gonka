@@ -1,6 +1,6 @@
 import asyncio
 import os
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 import httpx
 from fastapi import FastAPI, Request, Response
@@ -13,6 +13,13 @@ from common.logger import create_logger
 logger = create_logger(__name__)
 
 VLLM_HOST = "127.0.0.1"
+
+DEFAULT_VERSIONED_PREFIXES: Iterable[str] = ("/v3.0.8",)
+VERSIONED_PREFIXES: tuple[str, ...] = tuple(
+    prefix.strip()
+    for prefix in os.getenv("MLNODE_VERSIONED_PREFIXES", ",".join(DEFAULT_VERSIONED_PREFIXES)).split(",")
+    if prefix.strip()
+)
 
 LIMITS = httpx.Limits(
     max_connections=20_000,
@@ -29,12 +36,64 @@ compatibility_app: Optional[FastAPI] = None
 compatibility_server_task: Optional[asyncio.Task] = None
 
 
+def _match_versioned_prefix(path: str) -> Optional[str]:
+    """Return the versioned prefix that matches the provided path."""
+
+    for prefix in VERSIONED_PREFIXES:
+        if not prefix:
+            continue
+
+        if not path.startswith(prefix):
+            continue
+
+        if len(path) == len(prefix) or path[len(prefix)] in {"/", "?"}:
+            return prefix
+
+    return None
+
+
+def _strip_prefix_from_raw_path(raw_path: Optional[bytes], prefix: str) -> Optional[bytes]:
+    """Return a raw_path value without the supplied prefix."""
+
+    if not raw_path:
+        return raw_path
+
+    try:
+        raw = raw_path.decode("latin-1")
+    except UnicodeDecodeError:
+        return raw_path
+
+    if not raw.startswith(prefix):
+        return raw_path
+
+    suffix = raw[len(prefix):]
+    if not suffix:
+        suffix = "/"
+    elif suffix[0] == "?":
+        suffix = "/" + suffix
+    elif suffix[0] != "/":
+        suffix = "/" + suffix
+
+    return suffix.encode("latin-1")
+
+
 class ProxyMiddleware(BaseHTTPMiddleware):
     """Middleware to handle routing between /api and /v1 endpoints."""
-    
+
     async def dispatch(self, request: Request, call_next):
-        path = request.url.path
-        
+        scope = request.scope
+        path = scope.get("path") or request.url.path
+
+        matched_prefix = _match_versioned_prefix(path)
+        if matched_prefix:
+            trimmed_path = path[len(matched_prefix):] or "/"
+            if not trimmed_path.startswith("/"):
+                trimmed_path = "/" + trimmed_path
+
+            scope["path"] = trimmed_path
+            scope["raw_path"] = _strip_prefix_from_raw_path(scope.get("raw_path"), matched_prefix)
+            path = trimmed_path
+
         if path.startswith("/v1"):
             return await self._proxy_to_vllm(request)
         
