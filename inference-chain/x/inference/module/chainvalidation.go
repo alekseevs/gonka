@@ -91,6 +91,7 @@ func (am AppModule) GetPreviousEpochMLNodesWithInferenceAllocation(ctx context.C
 		am.LogError("GetPreviousEpochMLNodesWithInferenceAllocation: Current epoch group does not match upcoming epoch", types.PoC,
 			"currentEpochGroup.EpochIndex", currentEpochGroup.GroupData.EpochIndex,
 			"upcomingEpoch.Index", upcomingEpoch.Index)
+		return nil
 	}
 
 	am.LogInfo("GetPreviousEpochMLNodesWithInferenceAllocation: Processing current epoch group (about to end)", types.PoC,
@@ -103,6 +104,10 @@ func (am AppModule) GetPreviousEpochMLNodesWithInferenceAllocation(ctx context.C
 	if err != nil {
 		am.LogError("GetPreviousEpochMLNodesWithInferenceAllocation: Error getting preserved nodes by participant", types.PoC, "error", err)
 		return nil
+	}
+
+	if err != nil {
+		am.LogWarn("GetPreviousEpochMLNodesWithInferenceAllocation: Unable to get preserved nodes by participant", types.PoC, "error", err)
 	}
 
 	// Iterate through all validation weights in current epoch to find inference-serving MLNodes

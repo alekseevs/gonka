@@ -7,6 +7,7 @@ data class ApiConfig(
     val bandwidthParams: BandwidthParams,
     val chainNode: ChainNode,
     val currentHeight: Long,
+    val lastProcessedHeight: Long,
     val currentNodeVersion: String,
     val lastUsedVersion: String?,
     val currentSeed: SeedInfo,

@@ -138,16 +138,26 @@ type MockRandomSeedManager struct {
 	mock.Mock
 }
 
-func (m *MockRandomSeedManager) GenerateSeed(blockHeight uint64) {
-	m.Called(blockHeight)
-}
-
 func (m *MockRandomSeedManager) ChangeCurrentSeed() {
 	m.Called()
 }
 
-func (m *MockRandomSeedManager) RequestMoney() {
+func (m *MockRandomSeedManager) GetSeedForEpoch(epochIndex uint64) apiconfig.SeedInfo {
 	m.Called()
+	return apiconfig.SeedInfo{}
+}
+
+func (m *MockRandomSeedManager) RequestMoney(epochIndex uint64) {
+	m.Called()
+}
+
+func (m *MockRandomSeedManager) CreateNewSeed(epochIndex uint64) (*apiconfig.SeedInfo, error) {
+	m.Called()
+	return nil, nil
+}
+
+func (m *MockRandomSeedManager) GenerateSeedInfo(epochIndex uint64) {
+	m.Called(epochIndex)
 }
 
 type MockQueryClient struct {
@@ -280,9 +290,11 @@ func createIntegrationTestSetup(reconcilialtionConfig *MlNodeReconciliationConfi
 	}, nil)
 
 	// Setup mock expectations for RandomSeedManager
-	mockSeedManager.On("GenerateSeed", mock.AnythingOfType("uint64")).Return()
 	mockSeedManager.On("ChangeCurrentSeed").Return()
 	mockSeedManager.On("RequestMoney").Return()
+	mockSeedManager.On("GenerateSeedInfo", mock.AnythingOfType("uint64")).Return()
+	mockSeedManager.On("CreateNewSeed", mock.AnythingOfType("uint64")).Return()
+	mockSeedManager.On("GetSeedForEpoch").Return(apiconfig.SeedInfo{})
 
 	var finalReconciliationConfig MlNodeReconciliationConfig
 	if reconcilialtionConfig == nil {

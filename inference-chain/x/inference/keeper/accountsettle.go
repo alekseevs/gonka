@@ -198,7 +198,6 @@ func (k *Keeper) SettleAccounts(ctx context.Context, currentEpochIndex uint64, p
 	for _, participant := range allParticipants {
 		k.LogDebug("Checking downtime for participant", types.Settle, "participant", participant.Address, "missed_requests", participant.CurrentEpochStats.MissedRequests, "inference_count", participant.CurrentEpochStats.InferenceCount)
 		// TODO: Check if it is better to move this function outside the settleAccounts function.
-		// Check for downtime and slash if necessary.
 		k.CheckAndSlashForDowntime(ctx, &participant)
 	}
 

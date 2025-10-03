@@ -218,14 +218,53 @@ func (s *InferenceValidator) DetectMissedValidations(epochIndex uint64, seed int
 		inferenceMap[inf.InferenceId] = inf
 	}
 
-	validationParamsResp, err := queryClient.GetInferenceValidationParameters(s.recorder.GetContext(), &types.QueryGetInferenceValidationParametersRequest{
-		Ids:       inferenceIds,
-		Requester: address,
-	})
-	if err != nil {
-		logging.Error("Failed to get validation parameters", types.ValidationRecovery, "error", err)
-		return nil, fmt.Errorf("failed to get validation parameters: %w", err)
+	// Process inference IDs in batches to avoid "request body too large" errors
+	const batchSize = 1000 // Reasonable batch size to stay under request limits
+	var allValidationDetails []*types.InferenceValidationDetails
+	var validatorPower uint64
+
+	for i := 0; i < len(inferenceIds); i += batchSize {
+		end := i + batchSize
+		if end > len(inferenceIds) {
+			end = len(inferenceIds)
+		}
+
+		batch := inferenceIds[i:end]
+		logging.Debug("Processing validation parameters batch", types.ValidationRecovery,
+			"batchNumber", (i/batchSize)+1,
+			"batchSize", len(batch),
+			"totalBatches", (len(inferenceIds)+batchSize-1)/batchSize)
+
+		batchResp, err := queryClient.GetInferenceValidationParameters(s.recorder.GetContext(), &types.QueryGetInferenceValidationParametersRequest{
+			Ids:       batch,
+			Requester: address,
+		})
+		if err != nil {
+			logging.Error("Failed to get validation parameters for batch", types.ValidationRecovery,
+				"batchNumber", (i/batchSize)+1,
+				"batchSize", len(batch),
+				"error", err)
+			return nil, fmt.Errorf("failed to get validation parameters for batch %d: %w", (i/batchSize)+1, err)
+		}
+
+		allValidationDetails = append(allValidationDetails, batchResp.Details...)
+
+		// Capture ValidatorPower from the first batch (it should be the same across all batches)
+		if i == 0 {
+			validatorPower = batchResp.ValidatorPower
+		}
 	}
+
+	// Create a combined response structure
+	validationParamsResp := &types.QueryGetInferenceValidationParametersResponse{
+		Details:        allValidationDetails,
+		ValidatorPower: validatorPower,
+	}
+
+	logging.Info("Completed batched validation parameter queries", types.ValidationRecovery,
+		"totalInferences", len(inferenceIds),
+		"totalBatches", (len(inferenceIds)+batchSize-1)/batchSize,
+		"retrievedDetails", len(allValidationDetails))
 
 	// Get validation params
 	params, err := queryClient.Params(s.recorder.GetContext(), &types.QueryParamsRequest{})
@@ -263,7 +302,7 @@ func (s *InferenceValidator) DetectMissedValidations(epochIndex uint64, seed int
 	var missedValidations []types.Inference
 	for _, inferenceDetails := range validationParamsResp.Details {
 		if !supportedModels[inferenceDetails.Model] {
-			logging.Info("Skipping inference - model not supported by any node", types.ValidationRecovery, "inferenceId", inferenceDetails.InferenceId, "model", inferenceDetails.Model)
+			logging.Debug("Skipping inference - model not supported by any node", types.ValidationRecovery, "inferenceId", inferenceDetails.InferenceId, "model", inferenceDetails.Model)
 			continue
 		}
 		// Check if this participant should validate this inference
